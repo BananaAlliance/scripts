@@ -6,7 +6,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
 
-SERVER_JS='https://github.com/sicmundu/tg_bot_nodes/raw/main/server.js'
+SERVER_JS='https://github.com/BananaAlliance/scripts/raw/main/bananaNodesBot/server.js'
 
 # Функция для вывода сообщения с рамкой
 function box_msg() {

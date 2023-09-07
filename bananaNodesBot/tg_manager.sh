@@ -69,17 +69,6 @@ if ! command -v node > /dev/null; then
     echo -e "${GREEN}Node.js и NPM успешно установлены.${NC}\n"
 fi
 
-# Проверка и установка Docker
-if ! command -v docker > /dev/null; then
-    box_msg "Установка Docker"
-    animate "Установка"
-    sudo apt-get update
-    sudo apt-get install -y docker.io
-    sudo systemctl enable docker
-    sudo systemctl start docker
-    echo -e "${GREEN}Docker успешно установлен.${NC}\n"
-fi
-
 # Создание каталога проекта
 box_msg "Создание каталога проекта"
 animate "Создание"
@@ -104,7 +93,7 @@ echo -e "${GREEN}Токен сохранен.${NC}\n"
 box_msg "Установка зависимостей"
 animate "Установка"
 npm init -y
-npm install express dotenv
+npm install express dotenv node-cache
 echo -e "${GREEN}Зависимости успешно установлены.${NC}\n"
 
 # Создание и запуск службы

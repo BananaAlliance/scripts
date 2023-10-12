@@ -34,6 +34,30 @@ app.use((req, res, next) => {
     next();
 });
 
+function getNodeVersion(nodeName, callback) {
+    let command;
+    
+    switch(nodeName) {
+        case 'subspace-pulsar':
+            console.log('CHECKED')
+            command = `$HOME/subspace-pulsar/pulsar --version | awk '{print $2}'`;
+            break;
+        default:
+            console.error(`Unknown node: ${nodeName}`);
+            callback("Unknown Node");
+            return;
+    }
+
+    exec(command, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`exec error: ${error}`);
+            callback("Error");
+            return;
+        }
+
+        callback(stdout.trim());
+    });
+}
 
 
 function checkNodeStatus(nodeName, checkType, callback) {
@@ -70,6 +94,17 @@ function checkNodeStatus(nodeName, checkType, callback) {
     });
 }
 
+
+app.get('/node_version/:nodeName', (req, res) => {
+    console.log('NODE VERSION:')
+    const nodeName = req.params.nodeName;
+    getNodeVersion(nodeName, (version) => {
+        res.send({
+            node: nodeName,
+            version: version
+        });
+    });
+});
 
 app.get('/server_status', (req, res) => {
     // Получение свободного места и общего объема диска
@@ -116,4 +151,3 @@ app.get('/status', (req, res) => {
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
-

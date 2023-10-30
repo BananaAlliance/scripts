@@ -104,3 +104,14 @@ MINT_FUN_PASS_ADDRESS = '0x0000000000664ceffed39244a8312bD895470803'
 MINT_FUN_PASS_ABI = json.load(open('abi/mint_fun_pass.json'))
 
 ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
+
+PROTOCOL_REWARDS_ADDRESSES = {
+    'Ethereum': [],
+    'Zora': [
+        '0x7777777F279eba3d3Ad8F4E708545291A6fDBA8B',
+        '0x7777777A456fF23D9b6851184472c08FBDa73e32',
+    ],
+    'Optimism': [],
+    'Base': ['0x7777777F279eba3d3Ad8F4E708545291A6fDBA8B'],
+}
+PROTOCOL_REWARDS_ABI = json.load(open('abi/protocol_rewards.json'))

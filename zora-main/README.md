@@ -7,6 +7,7 @@
  - Create NFT in existed ERC1155 collection
  - Update collections and NFT metadata
  - Link email to Zora account
+ - Claim rewards
 
 ### Follow: https://t.me/thelaziestcoder
 

@@ -36,6 +36,37 @@ with open('files/english_words.txt', 'r', encoding='utf-8') as words_file:
     english_words = words_file.read().splitlines()
 
 
+def parse_mint_link(link):
+    link = link.strip()
+    if link == '' or link[0] == '#':
+        return None
+    if link.startswith('custom'):
+        chain = link.split(':')[1]
+        token_id = 'custom'
+        nft_info = link[7 + len(chain) + 1:]
+        chain = ZORA_CHAINS_MAP[chain]
+        if chain not in MINT_CHAINS:
+            return None
+        return chain, nft_info, token_id
+    if MINT_ONLY_CUSTOM:
+        return None
+    if link.startswith('https://'):
+        link = link[8:]
+    if link.startswith('zora.co/collect/'):
+        link = link[16:]
+    chain, nft_info = tuple(link.split(':'))
+    if '/' in nft_info:
+        nft_address, token_id = tuple(nft_info.split('/'))
+    else:
+        nft_address, token_id = nft_info, None
+    chain = ZORA_CHAINS_MAP[chain]
+    if chain not in MINT_CHAINS:
+        return None
+    nft_address = Web3.to_checksum_address(nft_address)
+    token_id = int(token_id) if token_id else None
+    return chain, nft_address, token_id
+
+
 def get_random_words(n: int):
     return [random.choice(english_words) for _ in range(n)]
 
@@ -299,14 +330,13 @@ class Runner:
         if balance >= MAX_NFT_PER_ADDRESS:
             return Status.ALREADY, None
 
-        contract_version = contract.functions.contractVersion().call()
-
-        minter_address = MINTER_ADDRESSES[contract_version][get_chain(w3)] if contract_version in MINTER_ADDRESSES \
-            else MINTER_ADDRESSES['Other'][get_chain(w3)]
-
+        minter_address = MINTER_ADDRESSES['2.0.0'][get_chain(w3)]
         minter = w3.eth.contract(minter_address, abi=ZORA_MINTER_ABI)
-
         sale_config = minter.functions.sale(nft_address, token_id).call()
+        if sale_config[0] == 0:
+            minter_address = MINTER_ADDRESSES['Other'][get_chain(w3)]
+            minter = w3.eth.contract(minter_address, abi=ZORA_MINTER_ABI)
+            sale_config = minter.functions.sale(nft_address, token_id).call()
         price = sale_config[3]
 
         value = contract.functions.mintFee().call() + price
@@ -343,6 +373,7 @@ class Runner:
     @runner_func('Mint Custom')
     def mint_custom(self, w3, nft_info):
         nft_address, cnt, price = tuple(nft_info.split(':'))
+        nft_address = Web3.to_checksum_address(nft_address)
         cnt = int(cnt)
         price = decimal_to_int(float(price), NATIVE_DECIMALS)
 
@@ -377,8 +408,10 @@ class Runner:
 
     def _mint(self, nft):
         chain, nft_address, token_id = nft
+        if token_id != 'custom':
+            nft_address = Web3.to_checksum_address(nft_address)
         w3 = self.w3(chain)
-        logger.print(f'Starting mint: {chain} - {nft_address}')
+        logger.print(f'Starting mint: {chain} - {nft_address}{"" if token_id is None else " - Token " + str(token_id)}')
 
         self.wait_for_eth_gas_price(w3)
 
@@ -546,7 +579,7 @@ class Runner:
         create_nft_action = f'0x674cbae6' \
                             f'0000000000000000000000000000000000000000000000000000000000000060' \
                             f'000000000000000000000000000000000000000000000000ffffffffffffffff' \
-                            f'0000000000000000000000000000000000000000000000000000000000000000' \
+                            f'000000000000000000000000634ff7bfa0d8c06f2423cd26b91bc76a368ddc92' \
                             f'00000000000000000000000000000000000000000000000000000000000000{hex(len(nft_uri))[2:]}' \
                             f'{nft_uri_hex}'
         nft_settings_action = f'0xafed7e9e' \
@@ -635,7 +668,7 @@ class Runner:
         logger.print(f'Creating new NFT for collection {collection_address}')
         contract = w3.eth.contract(collection_address, abi=ZORA_ERC1155_ABI)
 
-        fixed_price_minter = w3.eth.contract(ZORA_1155_CREATOR_ADDRESS, abi=ZORA_1155_CREATOR_ABI).\
+        fixed_price_minter = w3.eth.contract(ZORA_1155_CREATOR_ADDRESS, abi=ZORA_1155_CREATOR_ABI). \
             functions.fixedPriceMinter().call()
 
         next_token_id = contract.functions.nextTokenId().call()
@@ -665,28 +698,22 @@ class Runner:
 
     @runner_func('Get created collection')
     def get_created_zora_collections(self, is_erc_1155, timestamp_from=None):
-        body = {
-            'operationName': 'userCollections',
-            'query': 'query userCollections($admin: Bytes!, $offset: Int!, $limit: Int!, $contractStandards: [String!] = [\"ERC1155\", \"ERC721\"], $orderDirection: OrderDirection! = desc) {\n  zoraCreateContracts(\n    orderBy: createdAtBlock\n    orderDirection: $orderDirection\n    where: {permissions_: {user: $admin, isAdmin: true}, contractStandard_in: $contractStandards}\n    first: $limit\n    skip: $offset\n  ) {\n    ...Collection\n  }\n}\n\nfragment Collection on ZoraCreateContract {\n  id\n  address\n  name\n  symbol\n  owner\n  creator\n  contractURI\n  contractStandard\n  contractVersion\n  mintFeePerQuantity\n  timestamp\n  metadata {\n    ...Metadata\n  }\n  tokens {\n    ...Token\n  }\n  salesStrategies {\n    ...SalesStrategy\n  }\n  royalties {\n    ...Royalties\n  }\n  txn {\n    ...TxnInfo\n  }\n}\n\nfragment Metadata on MetadataInfo {\n  name\n  description\n  image\n  animationUrl\n  rawJson\n}\n\nfragment Token on ZoraCreateToken {\n  id\n  tokenId\n  address\n  uri\n  maxSupply\n  totalMinted\n  rendererContract\n  contract {\n    id\n    owner\n    creator\n    contractVersion\n    metadata {\n      ...Metadata\n    }\n  }\n  metadata {\n    ...Metadata\n  }\n  permissions {\n    user\n  }\n  salesStrategies {\n    ...SalesStrategy\n  }\n  royalties {\n    ...Royalties\n  }\n}\n\nfragment SalesStrategy on SalesStrategyConfig {\n  presale {\n    presaleStart\n    presaleEnd\n    merkleRoot\n    configAddress\n    fundsRecipient\n    txn {\n      timestamp\n    }\n  }\n  fixedPrice {\n    maxTokensPerAddress\n    saleStart\n    saleEnd\n    pricePerToken\n    configAddress\n    fundsRecipient\n    txn {\n      timestamp\n    }\n  }\n  redeemMinter {\n    configAddress\n    redeemsInstructionsHash\n    ethAmount\n    ethRecipient\n    isActive\n    saleEnd\n    saleStart\n    target\n    txn {\n      timestamp\n    }\n    redeemMintToken {\n      tokenId\n      tokenType\n      tokenContract\n      amount\n    }\n    redeemInstructions {\n      amount\n      tokenType\n      tokenIdStart\n      tokenIdEnd\n      burnFunction\n      tokenContract\n      transferRecipient\n    }\n  }\n}\n\nfragment Royalties on RoyaltyConfig {\n  royaltyBPS\n  royaltyRecipient\n  royaltyMintSchedule\n}\n\nfragment TxnInfo on TransactionInfo {\n  id\n  block\n  timestamp\n}\n',
-            'variables': {
-                'admin': self.address.lower(),
-                'limit': 36,
-                'offset': 0
-            }
-        }
-        resp_raw = requests.post('https://api.goldsky.com/api/public/'
-                                 'project_clhk16b61ay9t49vm6ntn4mkz/subgraphs/'
-                                 'zora-create-zora-mainnet/stable/gn', json=body, proxies=self.http_proxies)
+        resp_raw = requests.get(f'https://zora.co/api/user/{self.address}/admin'
+                                f'?query=adminCollections'
+                                f'&chainId=7777777'
+                                f'&direction=desc'
+                                f'&limit=1000'
+                                f'&includeTokens=true')
         if resp_raw.status_code != 200:
             raise Exception(f'status_code = {resp_raw.status_code}, response = {resp_raw.text}')
         try:
-            created_list = resp_raw.json()['data']['zoraCreateContracts']
+            created_list = resp_raw.json()
             eligible_addresses = []
             standard = 'ERC1155' if is_erc_1155 else 'ERC721'
             for created in created_list:
                 if is_erc_1155 is not None and created['contractStandard'] != standard:
                     continue
-                if timestamp_from and int(created['timestamp']) < timestamp_from:
+                if timestamp_from and int(created['txn']['timestamp']) < timestamp_from:
                     continue
                 eligible_addresses.append(created['address'])
             return eligible_addresses
@@ -696,7 +723,7 @@ class Runner:
     def wait_recently_created_collection(self, is_erc_1155, timestamp_from):
         wait_time = 0
 
-        while wait_time < 30:
+        while wait_time < 60:
 
             logger.print(f'Create: Waiting for collection creating')
             time.sleep(5)
@@ -719,9 +746,9 @@ class Runner:
                 logger.print(f'Create: {collection_link}', color='green')
                 with open(f'{results_path}/created_collections.txt', 'a', encoding='utf-8') as file:
                     file.write(f'{self.address}:{collection_link}\n')
-                return True
+                return parse_mint_link(collection_link)
 
-        return False
+        return None
 
     def save_created_1155_nft(self, collection_address):
         collection_link = f'https://zora.co/collect/zora:{collection_address.lower()}'
@@ -732,6 +759,7 @@ class Runner:
         logger.print(f'Create: {collection_link}', color='green')
         with open(f'{results_path}/created_collections.txt', 'a', encoding='utf-8') as file:
             file.write(f'{self.address}:{collection_link}\n')
+        return parse_mint_link(collection_link)
 
     def update_image(self, w3, collection_address):
         contract = w3.eth.contract(EDITION_METADATA_RENDERER_ADDRESS, abi=EDITION_METADATA_RENDERER_ABI)
@@ -894,6 +922,27 @@ class Runner:
         admin_mint_func = self._admin_mint_1155 if is_erc_1155 else self._admin_mint
         return self.zora_action_wrapper(admin_mint_func, collection_address)
 
+    def _claim(self):
+        for chain in REWARDS_CHAINS:
+            w3 = self.w3(chain)
+            for address in PROTOCOL_REWARDS_ADDRESSES[chain]:
+                contract = w3.eth.contract(address, abi=PROTOCOL_REWARDS_ABI)
+                balance = contract.functions.balanceOf(self.address).call()
+                if balance < decimal_to_int(MIN_REWARDS_TO_CLAIM, NATIVE_DECIMALS):
+                    continue
+                self.wait_for_eth_gas_price(w3)
+                self.build_and_send_tx(
+                    w3,
+                    contract.functions.withdraw(self.address, balance),
+                    action='Claim rewards',
+                )
+                logger.print(f'Claimed {int_to_decimal(balance, NATIVE_DECIMALS)} ETH on {chain}')
+                wait_next_tx()
+        return Status.SUCCESS
+
+    def claim(self):
+        return self.zora_action_wrapper(self._claim)
+
 
 def wait_next_run(idx, runs_count):
     wait = random.randint(
@@ -920,6 +969,35 @@ def wait_next_run(idx, runs_count):
     time.sleep(wait)
 
 
+@runner_func('Get all created collections')
+def get_all_created(address, proxy):
+    if proxy is not None and len(proxy) > 4 and proxy[:4] != 'http':
+        proxy = 'http://' + proxy
+
+    proxies = {'http': proxy, 'https': proxy} if proxy and proxy != '' else {}
+
+    resp_raw = requests.get(f'https://zora.co/api/user/{address}/admin'
+                            f'?query=adminCollections'
+                            f'&chainId=7777777'
+                            f'&direction=desc'
+                            f'&limit=1000'
+                            f'&includeTokens=true', proxies=proxies)
+    if resp_raw.status_code != 200:
+        raise Exception(f'status_code = {resp_raw.status_code}, response = {resp_raw.text}')
+    try:
+        created_list = resp_raw.json()
+        created_mints = []
+        for created in created_list:
+            if created['contractStandard'] == 'ERC721':
+                created_mints.append(('Zora', created['address'], None))
+            else:
+                created_mints.extend([('Zora', created['address'], token_id + 1)
+                                     for token_id in range(len(created['tokens']))])
+        return created_mints
+    except Exception as e:
+        raise Exception(f'status_code = {resp_raw.status_code}, response = {resp_raw.text}: {str(e)}')
+
+
 def main():
     if GET_TELEGRAM_CHAT_ID:
         get_telegram_bot_chat_id()
@@ -943,39 +1021,14 @@ def main():
     queue = list(zip(wallets, proxies))
     mints = []
     for link in mint_links:
-        link = link.strip()
-        if link == '' or link[0] == '#':
+        parsed = parse_mint_link(link)
+        if parsed is None:
             continue
-        if link.startswith('custom'):
-            chain = link.split(':')[1]
-            token_id = 'custom'
-            nft_info = link[7 + len(chain) + 1:]
-            chain = ZORA_CHAINS_MAP[chain]
-            if chain not in MINT_CHAINS:
-                continue
-            mints.append((chain, nft_info, token_id))
-            continue
-        if MINT_ONLY_CUSTOM:
-            continue
-        if link.startswith('https://'):
-            link = link[8:]
-        if link.startswith('zora.co/collect/'):
-            link = link[16:]
-        chain, nft_info = tuple(link.split(':'))
-        if '/' in nft_info:
-            nft_address, token_id = tuple(nft_info.split('/'))
-        else:
-            nft_address, token_id = nft_info, None
-        chain = ZORA_CHAINS_MAP[chain]
-        if chain not in MINT_CHAINS:
-            continue
-        nft_address = Web3.to_checksum_address(nft_address)
-        token_id = int(token_id) if token_id else None
-        mints.append((chain, nft_address, token_id))
+        mints.append(parsed)
 
     idx, runs_count = 0, len(queue)
 
-    stats = {}
+    created_mints, stats = {}, {}
 
     for wallet, proxy in queue:
         if wallet.find(';') == -1:
@@ -984,6 +1037,11 @@ def main():
             key = wallet.split(';')[1]
 
         address = Account().from_key(key).address
+
+        created_mints[address] = []
+        if MINT_ALREADY_CREATED_PERCENT > 0:
+            created_mints[address].extend(get_all_created(address, proxy))
+
         stats[address] = {chain: 0 for chain in INVOLVED_CHAINS}
         stats[address]['Created'] = 0
         stats[address]['Updated'] = 0
@@ -1031,7 +1089,11 @@ def main():
             logger.print(f'{module}: Started', color='blue')
             try:
                 nothing_minted = False
-                if module == 'Bridge':
+                if module == 'Claim':
+
+                    runner.claim()
+
+                elif module == 'Bridge':
 
                     if auto_bridged_cnt > 0:
                         auto_bridged_cnt -= 1
@@ -1058,20 +1120,24 @@ def main():
 
                     if type(create_status) is tuple:
                         wait_next_tx()
-                        runner.save_created_1155_nft(create_status[1])
+                        created_nft = runner.save_created_1155_nft(create_status[1])
+                        created_mints[address].append(created_nft)
                     else:
-                        if not runner.wait_recently_created_collection(USE_NFT_1155, timestamp):
-                            logger.print(f'{module}: Can\'t get created collection link for 20 seconds', color='red')
+                        created_nft = runner.wait_recently_created_collection(USE_NFT_1155, timestamp)
+                        if created_nft is None:
+                            logger.print(f'{module}: Can\'t get created collection link for 60 seconds', color='red')
+                        else:
+                            created_mints[address].append(created_nft)
 
                 elif module == 'Update':
 
                     is_erc_1155 = random.randint(1, 2) == 1
 
                     collection_addresses = runner.get_created_zora_collections(is_erc_1155)
-                    if len(collection_addresses) == 0 and not is_erc_1155:
+                    if len(collection_addresses) == 0:
                         collection_addresses = runner.get_created_zora_collections(not is_erc_1155)
 
-                    if len(collection_addresses) == 0:
+                    if len(collection_addresses) == 0 and AUTO_CREATE:
 
                         logger.print(f'{module}: No collections found. Let\'s create one')
 
@@ -1087,12 +1153,16 @@ def main():
 
                         if type(create_status) is tuple:
                             wait_next_tx()
-                            runner.save_created_1155_nft(create_status[1])
+                            created_nft = runner.save_created_1155_nft(create_status[1])
+                            created_mints[address].append(created_nft)
                         else:
-                            if not runner.wait_recently_created_collection(USE_NFT_1155, timestamp):
-                                logger.print(f'{module}: Can\'t get created collection link for 20 seconds',
+                            created_nft = runner.wait_recently_created_collection(USE_NFT_1155, timestamp)
+                            if created_nft is None:
+                                logger.print(f'{module}: Can\'t get created collection link for 60 seconds',
                                              color='red')
                                 continue
+                            else:
+                                created_mints[address].append(created_nft)
 
                         wait_next_tx()
 
@@ -1109,10 +1179,10 @@ def main():
                     is_erc_1155 = random.randint(1, 2) == 1
 
                     collection_addresses = runner.get_created_zora_collections(is_erc_1155)
-                    if len(collection_addresses) == 0 and not is_erc_1155:
+                    if len(collection_addresses) == 0:
                         collection_addresses = runner.get_created_zora_collections(not is_erc_1155)
 
-                    if len(collection_addresses) == 0:
+                    if len(collection_addresses) == 0 and AUTO_CREATE:
 
                         logger.print(f'{module}: No collections found. Let\'s create one')
 
@@ -1128,18 +1198,23 @@ def main():
 
                         if type(create_status) is tuple:
                             wait_next_tx()
-                            runner.save_created_1155_nft(create_status[1])
+                            created_nft = runner.save_created_1155_nft(create_status[1])
+                            created_mints[address].append(created_nft)
                         else:
-                            if not runner.wait_recently_created_collection(USE_NFT_1155, timestamp):
-                                logger.print(f'{module}: Can\'t get created collection link for 20 seconds',
+                            created_nft = runner.wait_recently_created_collection(USE_NFT_1155, timestamp)
+                            if created_nft is None:
+                                logger.print(f'{module}: Can\'t get created collection link for 60 seconds',
                                              color='red')
                                 continue
+                            else:
+                                created_mints[address].append(created_nft)
 
                         wait_next_tx()
 
                         collection_addresses = runner.get_created_zora_collections(USE_NFT_1155)
+                        is_erc_1155 = USE_NFT_1155
 
-                    _, bridged = runner.admin_mint(random.choice(collection_addresses), USE_NFT_1155)
+                    _, bridged = runner.admin_mint(random.choice(collection_addresses), is_erc_1155)
                     if bridged:
                         auto_bridged_cnt += 1
                     stats[address]['Admin Mint'] += 1
@@ -1152,9 +1227,27 @@ def main():
 
                     while len(possible_mints) != 0:
 
-                        nft = possible_mints.pop(0)
-                        if nft in minted_in_run:
-                            continue
+                        nft = None
+                        if random.randint(1, 100) <= MINT_ALREADY_CREATED_PERCENT:
+                            created_addresses = list(created_mints.keys())
+                            random.shuffle(created_addresses)
+                            for created_address in created_addresses:
+                                if created_address == address or len(created_mints[created_address]) == 0:
+                                    continue
+                                nfts = copy.deepcopy(created_mints[created_address])
+                                random.shuffle(nfts)
+                                for _nft in nfts:
+                                    if _nft in minted_in_run:
+                                        continue
+                                    nft = _nft
+                                    break
+                                if nft is not None:
+                                    break
+
+                        if nft is None:
+                            nft = possible_mints.pop(0)
+                            if nft in minted_in_run:
+                                continue
 
                         minted_in_run.add(nft)
 

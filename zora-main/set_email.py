@@ -50,6 +50,8 @@ class Zora:
 
         nonce = self.get_nonce()
 
+        time.sleep(random.uniform(0.5, 1.5))
+
         statement = f'Welcome to Zora!\n\n' \
                     f'By proceeding, you accept Zora’s Terms of Service ' \
                     f'(https://support.zora.co/en/articles/6383293-terms-of-service) ' \
@@ -90,14 +92,20 @@ class Zora:
     def ensure_authorized(self):
         if self.cookies.get('wallet') is None:
             self.sign_in()
+            logger.info('Signed in')
+            time.sleep(random.uniform(1.5, 3.5))
 
     def get_existed_email(self):
         self.ensure_authorized()
         resp = self.sess.get('https://zora.co/api/accounts/me', cookies=self.cookies)
+        if resp.status_code == 404:
+            return '', False
         if resp.status_code != 200:
             raise Exception(f'Get account info bas status code: {resp.status_code}, response = {resp.text}')
         try:
-            return resp.json()['account']['email_address'], resp.json()['account']['status'] == 'verified'
+            if 'account' not in resp.json():
+                return '', False
+            return resp.json()['account']['emailAddress'], resp.json()['account']['emailVerified']
         except Exception as e:
             raise Exception(f'Get account info bad response: response = {resp.text}: {str(e)}')
 
@@ -109,15 +117,12 @@ class Zora:
             return True, True
         if existed_email == '':
             resp = self.sess.post('https://zora.co/api/accounts/new', json={
-                'email_address': email_username,
-                'notification_preferences': {
-                    'creator': 'on',
-                    'marketing': 'on',
-                }
+                'emailAddress': email_username,
+                'marketingOptIn': True,
             }, cookies=self.cookies)
         elif existed_email != email_username:
             resp = self.sess.post('https://zora.co/api/accounts/update-email', json={
-                'email': email_username,
+                'emailAddress': email_username,
             }, cookies=self.cookies)
         else:
             logger.info("This email was already set")
@@ -129,12 +134,8 @@ class Zora:
         except Exception as e:
             raise Exception(f'Set email bad response: response = {resp.text}: {str(e)}')
 
-    def verify_email(self, email_info):
-        self.ensure_authorized()
-        email_username, email_password = tuple(email_info.split(':'))
-        imap = imaplib.IMAP4_SSL(config.IMAP_SERVER)
-        imap.login(email_username, email_password)
-        _, messages = imap.select('INBOX', readonly=True)
+    def check_folder(self, imap, folder):
+        _, messages = imap.select(folder, readonly=True)
         msg_cnt = int(messages[0])
         for i in range(msg_cnt, 0, -1):
             res, msg = imap.fetch(str(i), '(RFC822)')
@@ -146,7 +147,12 @@ class Zora:
             if subject != 'Verify your Zora account':
                 continue
             body = msg.get_payload(decode=True).decode()
-            body = body[body.find('Please verify your email'):]
+            pre_link_message = 'Please activate your account'
+            if pre_link_message not in body:
+                pre_link_message = 'Please verify your email'
+                if pre_link_message not in body:
+                    raise Exception(f'Can\'t find verification token in e-mail: body = {body}')
+            body = body[body.find(pre_link_message):]
             body = body[body.find('href') + 6:]
             link = body[:body.find('"')]
             token = link[link.rfind('=') + 1:]
@@ -159,6 +165,15 @@ class Zora:
                 return resp.json()['ok']
             except Exception as e:
                 raise Exception(f'Verify email bad response: response = {resp.text}: {str(e)}')
+
+    def verify_email(self, email_info):
+        self.ensure_authorized()
+        email_username, email_password = tuple(email_info.split(':'))
+        imap = imaplib.IMAP4_SSL(config.IMAP_SERVER)
+        imap.login(email_username, email_password)
+        for folder in config.EMAIL_FOLDERS:
+            if self.check_folder(imap, folder):
+                return True
         return False
 
 
@@ -181,7 +196,20 @@ def main():
         cprint('Emails count doesn\'t match wallets count', 'red')
         return
 
+    idx = 0
+
     for wallet, proxy, email_info in zip(wallets, proxies, emails):
+        idx += 1
+
+        if idx > 1:
+            wait = random.randint(
+                int(config.NEXT_ADDRESS_MIN_WAIT_TIME * 60),
+                int(config.NEXT_ADDRESS_MAX_WAIT_TIME * 60)
+            )
+            waiting_msg = 'Waiting for next run for {:.2f} minutes'.format(wait / 60)
+            logger.info(waiting_msg)
+            time.sleep(wait)
+
         if wallet.find(';') == -1:
             key = wallet
         else:
@@ -189,29 +217,41 @@ def main():
 
         client = Zora(key, proxy)
 
-        logger.info(f'Processing {client.address}')
+        logger.info(f'{idx}) Processing {client.address}')
 
-        set_success, verified = client.set_email(email_info)
-        if verified:
-            logger.success(f'Already verified')
-            continue
-        if not set_success:
-            logger.error(f'Can\'t set email')
+        try:
+            set_success, verified = client.set_email(email_info)
+            if verified and not config.UPDATE_EMAIL_IF_VERIFIED:
+                logger.success(f'{idx}) Email was already set and verified')
+                continue
+            if not set_success:
+                logger.error(f'{idx}) Can\'t set email')
+                continue
+        except Exception as e:
+            logger.error(f'{idx}) Failed set email: {str(e)}')
             continue
 
-        logger.info('Email was set')
+        logger.info(f'{idx}) Email was set')
 
         time.sleep(random.uniform(9, 11))
 
-        verified = client.verify_email(email_info)
+        try:
+            verified = client.verify_email(email_info)
+        except Exception as e:
+            verified = False
+            logger.error(f'{idx}) Failed to verify email: {str(e)}')
         t = 0
         while not verified and t < 120:
-            logger.error('Can\'t find verify email. Waiting for 10 secs')
+            logger.error(f'{idx}) Can\'t find verify email. Waiting for 10 secs')
             t += 10
             time.sleep(t)
-            verified = client.verify_email(email_info)
+            try:
+                verified = client.verify_email(email_info)
+            except Exception as e:
+                logger.error(f'{idx}) Failed to verify email: {str(e)}')
+                break
         if verified:
-            logger.success('Email verified')
+            logger.success(f'{idx}) Email verified')
 
 
 if __name__ == '__main__':

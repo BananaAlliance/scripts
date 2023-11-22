@@ -3,6 +3,7 @@ RPCs = {
     'Zora': 'https://rpc.zora.energy',
     'Optimism': 'https://optimism.publicnode.com',
     'Base': 'https://mainnet.base.org',
+    'Arbitrum': 'https://rpc.ankr.com/arbitrum',
 }
 
 ###############################################################################################################
@@ -73,6 +74,8 @@ MINT_ONLY_CUSTOM = False
 # Если у вас есть mint.fun Pass, то добавятся поинты за минты
 MINT_WITH_MINT_FUN = True
 # С каким процентом минтить любую NFT из уже созданных коллекций среди всех акков
+# Если значение > 0, то при страте скрипта сначала для всех аккаунтов будут запрашиваться созданные коллекции
+# Это может занять некоторое время, если кошельков много
 MINT_ALREADY_CREATED_PERCENT = 50
 
 # Сколько раз максимум можно минтить одну нфт. (Для кастомных проверяется MAX_NFT_PER_ADDRESS * cnt)
@@ -116,6 +119,12 @@ AUTO_BRIDGE_MAX_CNT = 1
 BRIDGE_AMOUNT = (0.005, 0.0065)
 # Сколько максимум ждать бриджа. Баланс проверяется каждые 20 секунд
 BRIDGE_WAIT_TIME = 300
+
+# Вместо оф бриджа делать рефуел из Arbitrum или Optimism в Zora через Zerius
+REFUEL_WITH_ZERIUS = True
+# При BRIDGE_WITH_ZERIUS = True, из какой сети делать рефуел,
+# Доступные сети: 'Arbitrum', 'Optimism'
+ZERIUS_SOURCE_CHAIN = 'Optimism'
 
 # Если ревардов меньше, чем указанная сумма, то клема не будет.
 MIN_REWARDS_TO_CLAIM = 0.001

@@ -35,7 +35,7 @@ class Zora:
         self.cookies.update({'wallet': wallet_cookie})
 
     def get_nonce(self):
-        resp = self.sess.get('https://zora.co/api/accounts/nonce', cookies=self.cookies)
+        resp = self.sess.get('https://zora.co/api/auth/nonce', cookies=self.cookies)
         if resp.status_code != 200:
             raise Exception(f'Get nonce bas status code: {resp.status_code}, response = {resp.text}')
         try:
@@ -68,7 +68,7 @@ class Zora:
         message = encode_defunct(text=msg)
         signature = self.account.sign_message(message).signature.hex()
 
-        resp = self.sess.post('https://zora.co/api/accounts/verify', json={
+        resp = self.sess.post('https://zora.co/api/auth/login', json={
             'message': {
                 'address': self.address,
                 'chainId': 1,
@@ -97,7 +97,7 @@ class Zora:
 
     def get_existed_email(self):
         self.ensure_authorized()
-        resp = self.sess.get('https://zora.co/api/accounts/me', cookies=self.cookies)
+        resp = self.sess.get('https://zora.co/api/account', cookies=self.cookies)
         if resp.status_code == 404:
             return '', False
         if resp.status_code != 200:
@@ -113,22 +113,24 @@ class Zora:
         self.ensure_authorized()
         email_username, _ = tuple(email_info.split(':'))
         existed_email, already_verified = self.get_existed_email()
-        if already_verified:
+        if already_verified and not config.UPDATE_EMAIL_IF_VERIFIED:
             return True, True
         if existed_email == '':
-            resp = self.sess.post('https://zora.co/api/accounts/new', json={
+            logger.info('Setting new email')
+            resp = self.sess.post('https://zora.co/api/account/new', json={
                 'emailAddress': email_username,
                 'marketingOptIn': True,
             }, cookies=self.cookies)
         elif existed_email != email_username:
-            resp = self.sess.post('https://zora.co/api/accounts/update-email', json={
+            logger.info('Updating existed email')
+            resp = self.sess.post('https://zora.co/api/account/update-email', json={
                 'emailAddress': email_username,
             }, cookies=self.cookies)
         else:
             logger.info("This email was already set")
             return True, False
         if resp.status_code != 200:
-            raise Exception(f'Set email bas status code: {resp.status_code}, response = {resp.text}')
+            raise Exception(f'Set email bad status code: {resp.status_code}, response = {resp.text}')
         try:
             return resp.json()['ok'], False
         except Exception as e:
@@ -157,7 +159,7 @@ class Zora:
             link = body[:body.find('"')]
             token = link[link.rfind('=') + 1:]
 
-            resp = self.sess.post('https://zora.co/api/accounts/email-verify', json={'token': token},
+            resp = self.sess.post('https://zora.co/api/account/email-verify', json={'token': token},
                                   cookies=self.cookies)
             if resp.status_code != 200:
                 raise Exception(f'Verify email bas status code: {resp.status_code}, response = {resp.text}')

@@ -16,7 +16,7 @@ export const bridgeConfig = {
     bridgeTo: 0.002,
     orbiterFrom: 0.005, // min 0.005
     orbiterTo: 0.0055,
-    maxGas: 14 // for official bridge Eth -> Scroll
+    maxGas: 10 // for official bridge Eth -> Scroll
 }
 
 export const swapConfig = {

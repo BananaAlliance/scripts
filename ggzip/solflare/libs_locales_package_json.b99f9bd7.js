@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunk_rise_wallet_solflare_extension=self.webpackChunk_rise_wallet_solflare_extension||[]).push([["libs_locales_package_json"],{"../../libs/locales/package.json":function(e){e.exports=JSON.parse('{"name":"@rise-wallet/locales","version":"0.1.0","private":true}')}}]);

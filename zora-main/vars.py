@@ -65,11 +65,15 @@ ZORA_ERC1155_ABI = json.load(open('abi/zora_erc_1155.json'))
 CUSTOM_ERC721_ABI = json.load(open('abi/custom_erc721.json'))
 
 MINTER_ADDRESSES = {
+    '2.7.0': {
+        'Base': '0x04E2516A2c207E84a1839755675dfd8eF6302F0a',
+    },
     '2.0.0': {
         'Ethereum': '0x04E2516A2c207E84a1839755675dfd8eF6302F0a',
         'Optimism': '0x3678862f04290E565cCA2EF163BAeb92Bb76790C',
         'Zora': '0x04E2516A2c207E84a1839755675dfd8eF6302F0a',
         'Base': '0xFF8B0f870ff56870Dc5aBd6cB3E6E89c8ba2e062',
+        'Arbitrum': '0x1Cd1C1f3b8B779B50Db23155F2Cb244FCcA06B21',
     },
     'Other': {
         'Ethereum': '0x8A1DBE9b1CeB1d17f92Bebf10216FCFAb5C3fbA7',
@@ -97,6 +101,7 @@ ZORA_CHAINS_MAP = {
     'oeth': 'Optimism',
     'zora': 'Zora',
     'base': 'Base',
+    'arb': 'Arbitrum',
 }
 
 MINT_FUN_DATA_SUFFIX = '0021fb3f'
@@ -113,6 +118,7 @@ PROTOCOL_REWARDS_ADDRESSES = {
     ],
     'Optimism': [],
     'Base': ['0x7777777F279eba3d3Ad8F4E708545291A6fDBA8B'],
+    'Arbitrum': ['0x7777777F279eba3d3Ad8F4E708545291A6fDBA8B'],
 }
 PROTOCOL_REWARDS_ABI = json.load(open('abi/protocol_rewards.json'))
 
@@ -131,3 +137,8 @@ ZERIUS_REFUEL_ADDRESSES = {
     'Zora': '0x1fe2c567169d39CCc5299727FfAC96362b2Ab90E',
 }
 ZERIUS_REFUEL_ABI = json.load(open('abi/zerius_refuel.json'))
+
+ERC_20_ABI = json.load(open('abi/erc20_token.json'))
+
+ERC20_MINTER = '0x777777E8850d8D6d98De2B5f64fae401F96eFF31'
+ERC20_MINTER_ABI = json.load(open('abi/erc20_minter.json'))

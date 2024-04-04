@@ -1,13 +1,18 @@
 # Zora Ultimate Soft
 
  - [Bridge from Ethereum to Zora](https://bridge.zora.energy/)
+ - Instant Bridge from Arbitrum, Optimism, Base
+ - Auto OKX withdraw
  - Mint any NFT from your own list
+ - Mint with ERC-20 tokens
+ - Mint from other chain
  - Earn mint.fun points
  - Create ERC721 and ERC1155 collections
  - Create NFT in existed ERC1155 collection
  - Update collections and NFT metadata
- - Link email to Zora account
+ - Link email and create Zora account
  - Claim rewards
+ - Check wallets stats
 
 ### Follow: https://t.me/thelaziestcoder
 
@@ -25,8 +30,12 @@ Installing all dependencies: \
 
 Run main script: \
 `python3 main.py`
+
 Link email to Zora account: \
 `python3 set_email.py`
+
+Check wallets stats: \
+`python3 checker.py`
 
 ### Results
 
